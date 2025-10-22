@@ -1,0 +1,3 @@
+window.SUPABASE_URL = 'https://bryiokmfzwolcmqvtxws.supabase.co';
+window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJyeWlva21mendvbGNtcXZ0eHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNTE4MzEsImV4cCI6MjA3MDkyNzgzMX0.WPdvoCP3wpWguC0AoBWBCEhrFcNSQiAEuMwoW_VhMuA';
+window.METRICS_URL = "http://127.0.0.1:8000/metrics_json";
