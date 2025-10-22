@@ -64,14 +64,72 @@
     </section>
 
     <!-- Rating -->
-    <section id="tab-rating" class="tab-content">
-      <h2 class="section-title">2) Rating (Satisfaction & Engagement)</h2>
-      <div class="grid three">
-        <div class="card"><div class="card-title">Rating Distribution</div><div id="r_hist" class="chart"></div></div>
-        <div class="card"><div class="card-title">Top Engaged Users (chat_count)</div><div id="r_top_chatters" class="chart"></div></div>
-        <div class="card"><div class="card-title">Top Satisfied / Dissatisfied</div><div id="r_top_avg" class="chart"></div></div>
+    <!-- Rating -->
+<section id="tab-rating" class="tab-content">
+  <h2 class="section-title">2) Rating (Customer Satisfaction & Engagement)</h2>
+
+  <!-- KPIs -->
+  <div class="grid kpis" style="margin-bottom:10px">
+    <div class="card kpi">
+      <div class="kpi-title">Total Chats (system)</div>
+      <div class="kpi-value" id="r_kpi_total_chats">—</div>
+      <div class="kpi-sub">sum of chat_count</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-title">Avg Chat Length / Session</div>
+      <div class="kpi-value" id="r_kpi_avg_len">—</div>
+      <div class="kpi-sub">messages per session</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-title">Users Rated</div>
+      <div class="kpi-value" id="r_kpi_users">—</div>
+      <div class="kpi-sub">rows in rating</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-title">Avg. Rating</div>
+      <div class="kpi-value" id="r_kpi_avg_rating">—</div>
+      <div class="kpi-sub">weighted</div>
+    </div>
+  </div>
+
+  <!-- Charts & table -->
+  <div class="grid three">
+    <div class="card">
+      <div class="card-title">Average Rating Trend (by day)</div>
+      <div id="r_avg_trend" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Ratings Distribution (histogram)</div>
+      <div id="r_hist" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Engaged Users (chat_count)</div>
+      <div id="r_top_chatters" class="chart"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Top Satisfied / Dissatisfied</div>
+      <div id="r_top_avg" class="chart"></div>
+    </div>
+
+    <div class="card" style="grid-column: span 2">
+      <div class="card-title">Total Chats per User</div>
+      <div style="max-height:340px; overflow:auto">
+        <table id="r_users_table" style="width:100%; border-collapse:collapse; color:#e2e8f0">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid rgba(255,255,255,.08)">
+              <th style="padding:8px">#</th>
+              <th style="padding:8px">User</th>
+              <th style="padding:8px">Chat Count</th>
+              <th style="padding:8px">Avg Rating</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
     <!-- AISum -->
     <section id="tab-aisum" class="tab-content">
