@@ -2,7 +2,14 @@ services:
   - type: web
     name: sinoai-dashboard
     env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn core.urls:app --host 0.0.0.0 --port 10000
-
-    
+    startCommand: uvicorn core.urls:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      # Agar kerak bo‘lsa, qo‘shimcha env'lar:
+      # - key: SUPABASE_URL
+      #   sync: false
+      # - key: SUPABASE_ANON_KEY
+      #   sync: false
