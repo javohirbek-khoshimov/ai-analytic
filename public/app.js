@@ -40,6 +40,14 @@
     if (['f','female','ayol','женский'].includes(v))  return 'Ayol';
     return 'unknown';
   };
+  // --- ratings uchun xavfsiz raqam ajratish (histogram uchun foydali)
+  function getNumericRating(row){
+    const v = Number(
+      row?.average ?? row?.avg ?? row?.rating ?? row?.stars ?? row?.last_rating ?? row?.lastRating
+    );
+    if (Number.isFinite(v) && v >= 0 && v <= 5) return v;
+    return null;
+  }
 
   const baseGrid = { left: 55, right: 20, top: 20, bottom: 56 };
   const baseAxis = { axisLabel:{ color:'#94a3b8', hideOverlap:true, interval:'auto' } };
@@ -147,99 +155,195 @@
       series:[barSeries('Users', ageVals)]
     });
 
-    // Rating → histogram
-    const avgs = (ratings||[]).map(r=>Number(r.average)).filter(v=>!isNaN(v));
-    const bins = new Map(); const step=0.5;
-    avgs.forEach(v=>{ const b=(Math.floor(v/step)*step).toFixed(1); bins.set(b,(bins.get(b)||0)+1); });
-    const histLabels = [...bins.keys()].map(Number).sort((a,b)=>a-b).map(v=>v.toFixed(1));
-    const histVals   = histLabels.map(l=>bins.get(Number(l))||0);
-    mount('r_hist', {
-      ...baseAnim, tooltip:{},
-      xAxis:{ type:'category', data:histLabels, ...baseAxis },
-      yAxis:{ type:'value', ...baseAxis }, grid: baseGrid,
-      series:[barSeries('Users', histVals)]
-    });
+    // ===================== RATING (SATISFACTION & ENGAGEMENT) =====================
+    // KPI’lar + trend + histogram + top engaged + jadval
 
-    // Top engaged
-    const engaged = [...(ratings||[])].sort((a,b)=>(b.chat_count||0)-(a.chat_count||0)).slice(0,10).reverse();
-    mount('r_top_chatters', {
-      ...baseAnim, tooltip:{}, grid:{ ...baseGrid, left: 150 },
-      xAxis:{ type:'value', ...baseAxis },
-      yAxis:{ type:'category', data: engaged.map(r=>r.name||'user'), ...baseAxis },
-      series:[barSeries('Chats', engaged.map(r=>r.chat_count||0))]
+    const ratedUsers   = (ratings||[]).length;
+    let totalChats     = 0, totalVotes=0, totalWeighted=0;
+    (ratings||[]).forEach(r => {
+      const c = Number(r.chat_count)||0;
+      const a = Number(r.average)||0;
+      const v = Number(r.rating_all)||0;
+      totalChats     += c;
+      totalVotes     += v;
+      totalWeighted  += v*a;
     });
+    const avgRatingWeighted = totalVotes ? (totalWeighted/totalVotes) : NaN;
 
-    // Top satisfied / dissatisfied
-    const rated  = (ratings||[]).filter(r=>!isNaN(Number(r.average)));
-    const topSat = [...rated].sort((a,b)=>(b.average||0)-(a.average||0)).slice(0,5);
-    const topDis = [...rated].sort((a,b)=>(a.average||0)-(b.average||0)).slice(0,5);
-    mount('r_top_avg', {
-      ...baseAnim, tooltip:{}, legend:{ bottom:0, textStyle:{color:'#cbd5e1'} },
-      grid:{ ...baseGrid, left: 140 },
-      xAxis:{ type:'value', ...baseAxis },
-      yAxis:{ type:'category',
-        data:[...topSat.map(r=>'😊 '+(r.name||'user')),...topDis.map(r=>'😕 '+(r.name||'user'))].reverse(),
-        ...baseAxis },
-      series:[barSeries('Avg', [...topSat.map(r=>r.average||0), ...topDis.map(r=>r.average||0)].reverse())]
-    });
+    // Avg chat length / session
+    let avgLen = 0;
+{
+  const bySession = new Map(); // key: chat_id__YYYY-M-D
+  for (const row of (aisum || [])) {
+    if (!row?.chat_id) continue;
+    const hasMsg = row.ai_message && String(row.ai_message).trim() !== '';
+    if (!hasMsg) continue;
 
-    // AISum → AI messages / day
-    const aiPerDay = Object.fromEntries(labels.map(d=>[d,0]));
-    aisum.forEach(r => {
-      if (r.ai_message && String(r.ai_message).trim()!==''){
+    const d = new Date(row.created_at);
+    const key = `${row.chat_id}__${d.getUTCFullYear()}-${d.getUTCMonth()+1}-${d.getUTCDate()}`;
+    bySession.set(key, (bySession.get(key) || 0) + 1);
+  }
+  const lens = [...bySession.values()];
+  avgLen = lens.length ? (lens.reduce((a,b)=>a+b,0) / lens.length) : 0;
+}
+
+    // KPI DOM
+    // KPI DOM
+const setTxt = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=String(v); };
+setTxt('r_kpi_total_chats', totalChats);
+setTxt('r_kpi_users', ratedUsers);
+setTxt('r_kpi_avg_len', avgLen ? avgLen.toFixed(1) : '—');
+setTxt('r_kpi_avg_rating', isNaN(avgRatingWeighted)?'—':avgRatingWeighted.toFixed(2));
+
+    // Trend (30 kun; hozircha tekis chiziq)
+    (() => {
+      const lab30 = U.lastNDaysLabels(30);
+      const vals  = lab30.map(_ => isNaN(avgRatingWeighted) ? 0 : +avgRatingWeighted.toFixed(2));
+      mount('r_avg_trend', {
+        ...baseAnim, tooltip:{trigger:'axis'},
+        xAxis:{ type:'category', data:lab30, ...baseAxis, axisLabel:{...baseAxis.axisLabel, rotate:45} },
+        yAxis:{ type:'value', min:0, max:5, ...baseAxis }, grid: baseGrid,
+        series:[areaSeries('Avg rating', vals)]
+      });
+    })();
+
+    // Ratings histogram (1.0..5.0, step=0.5) — ishonchli bin
+    // Ratings histogram — ONLY existing bins (rounded to 0.5), category axis
+{
+  // rating.average dan foydalanamiz; notog'ri/bo'sh qiymatlarni tashlab yuboramiz
+  const vals = (ratings || [])
+    .map(r => Number(r?.average))
+    .filter(v => Number.isFinite(v) && v > 0);
+
+  // 1..5 oralig'ida yaxlitlaymiz
+  const counts = { 1:0, 2:0, 3:0, 4:0, 5:0 };
+  vals.forEach(v => {
+    let k = Math.round(v);
+    if (k < 1) k = 1;
+    if (k > 5) k = 5;
+    counts[k] += 1;
+  });
+
+  const labelsH = ['1','2','3','4','5'];
+  const data    = labelsH.map(k => counts[Number(k)]);
+
+  mount('r_hist', {
+    ...baseAnim, tooltip:{},
+    grid: baseGrid,
+    xAxis:{ type:'category', data: labelsH, ...baseAxis, boundaryGap:true },
+    yAxis:{ type:'value', ...baseAxis },
+    series:[{ name:'Users', type:'bar', data, barMaxWidth: 28 }]
+  });
+}
+
+    // Top engaged (chat_count)
+    {
+      const engaged = [...(ratings||[])].sort((a,b)=>(b.chat_count||0)-(a.chat_count||0)).slice(0,10).reverse();
+      mount('r_top_chatters', {
+        ...baseAnim, tooltip:{}, grid:{ ...baseGrid, left: 150 },
+        xAxis:{ type:'value', ...baseAxis },
+        yAxis:{ type:'category', data: engaged.map(r=>r.name||'user'), ...baseAxis },
+        series:[barSeries('Chats', engaged.map(r=>r.chat_count||0))]
+      });
+    }
+
+    // Jadval: Total chats per user (Top 100)
+    (() => {
+      const tbody = document.querySelector('#r_users_table tbody');
+      if (!tbody) return;
+      const rows = [...(ratings||[])].sort((a,b)=>(b.chat_count||0)-(a.chat_count||0));
+      tbody.innerHTML = rows.slice(0,100).map((r,i)=>(
+        `<tr style="border-bottom:1px solid rgba(255,255,255,.06)">
+           <td style="padding:8px">${i+1}</td>
+           <td style="padding:8px">${(r.name||'user')}</td>
+           <td style="padding:8px">${r.chat_count||0}</td>
+           <td style="padding:8px">${isNaN(r.average)?'—':Number(r.average).toFixed(2)}</td>
+         </tr>`
+      )).join('');
+    })();
+
+   // =================== /RATING ===================
+
+    // AISum → AI messages / day (last N days; labels = U.lastNDaysLabels(days))
+    const aiPerDay = Object.fromEntries(labels.map(d => [d, 0]));
+    (aisum || []).forEach(r => {
+      if (r?.ai_message && String(r.ai_message).trim() !== '') {
         const k = U.toDay(r.created_at);
-        if (k in aiPerDay) aiPerDay[k]++;
+        if (k in aiPerDay) aiPerDay[k] += 1;
       }
     });
     mount('a_msgs_ts', {
-      ...baseAnim, tooltip:{trigger:'axis'},
-      xAxis:{ type:'category', data:labels, ...baseAxis, axisLabel:{...baseAxis.axisLabel, rotate:45} },
-      yAxis:{ type:'value', ...baseAxis }, grid: baseGrid,
-      series:[areaSeries('AI msg/day', labels.map(d=>aiPerDay[d]))]
-    });
-
-    // Topic stacked (Top 7)
-    const topicPairs  = U.countBy(aisum.filter(r=>r.topic), r=>r.topic).slice(0,7);
-    const topicKeys   = topicPairs.map(x=>x[0]);
-    const topicSeries = topicKeys.map(t=>{
-      const m = Object.fromEntries(labels.map(d=>[d,0]));
-      aisum.filter(r=>r.topic===t).forEach(r=>{ const k=U.toDay(r.created_at); if(k in m) m[k]++; });
-      return barSeries(t, labels.map(d=>m[d]), 'topic');
-    });
-    mount('a_topic_stack', {
       ...baseAnim,
-      tooltip:{trigger:'axis'},
-      legend:{ bottom:0, textStyle:{color:'#cbd5e1'}, type:'scroll' },
-      xAxis:{ type:'category', data:labels, ...baseAxis, axisLabel:{...baseAxis.axisLabel, rotate:45} },
-      yAxis:{ type:'value', ...baseAxis }, grid: baseGrid,
-      series: topicSeries
+      tooltip:{ trigger:'axis' },
+      grid: baseGrid,
+      xAxis:{ type:'category', data: labels, ...baseAxis,
+              axisLabel:{ ...baseAxis.axisLabel, rotate:45 } },
+      yAxis:{ type:'value', ...baseAxis },
+      series:[ areaSeries('AI msg/day', labels.map(d => aiPerDay[d])) ]
     });
 
-    // --- Kasallik Kategoriyalari (pie; legend o'ng-ust, Top-10 + Boshqa) ---
-    {
+    // Topic stacked (Top 7 by total count)
+    (()=>{
+      const topicRows = (aisum || []).filter(r => r?.topic);
+      const topicPairs = U.countBy(topicRows, r => r.topic)  // [['topic', count], ...]
+                           .sort((a,b)=>b[1]-a[1])
+                           .slice(0,7);
+      const keys = topicPairs.map(p => p[0]);
+
+      const perTopicPerDay = new Map(keys.map(k => [k, Object.fromEntries(labels.map(d=>[d,0]))]));
+      topicRows.forEach(r => {
+        if (!keys.includes(r.topic)) return;
+        const d = U.toDay(r.created_at);
+        if (d in (perTopicPerDay.get(r.topic) || {})) {
+          perTopicPerDay.get(r.topic)[d] += 1;
+        }
+      });
+
+      const series = keys.map(k => barSeries(k, labels.map(d => perTopicPerDay.get(k)[d]), 'topic'));
+      mount('a_topic_stack', {
+        ...baseAnim,
+        tooltip:{ trigger:'axis' },
+        legend:{ bottom:0, textStyle:{ color:'#cbd5e1' }, type:'scroll' },
+        grid: baseGrid,
+        xAxis:{ type:'category', data: labels, ...baseAxis,
+                axisLabel:{ ...baseAxis.axisLabel, rotate:45 } },
+        yAxis:{ type:'value', ...baseAxis },
+        series
+      });
+    })();
+
+    // --- Kasallik Kategoriyalari (pie; legend o'ng-ust, Top-10 + Boshqa, no duplicate 'Boshqa') ---
+    (()=>{
       const catCount = new Map();
       (aisum || []).forEach(r => {
-        const base = r.topic || r.ai_message || '';
+        const base = r?.topic || r?.ai_message || '';
         const cat  = mapToCategory(base) || 'Boshqa';
         catCount.set(cat, (catCount.get(cat) || 0) + 1);
       });
 
-      let pairs = [...catCount.entries()].sort((a,b)=>b[1]-a[1]);
-      if (pairs.length > 10) {
-        const top10 = pairs.slice(0,10);
-        const rest = pairs.slice(10).reduce((s, [,v])=>s+v, 0);
-        if (rest > 0) top10.push(['Boshqa', rest]);
-        pairs = top10;
+      // Top-10 + aggregate "Boshqa"
+      let entries = [...catCount.entries()].sort((a,b)=>b[1]-a[1]);
+      if (entries.length > 10) {
+        const top10 = entries.slice(0,10);
+        const rest  = entries.slice(10).reduce((s, [,v]) => s + v, 0);
+        const hasBoshqaTop = top10.find(([n]) => n === 'Boshqa');
+        if (rest > 0) {
+          if (hasBoshqaTop) {
+            // agar 'Boshqa' top10 ichida bo'lsa, o'shanga qo‘shib yuboramiz
+            hasBoshqaTop[1] += rest;
+          } else {
+            top10.push(['Boshqa', rest]);
+          }
+        }
+        entries = top10;
       }
 
-      const option = {
+      mount('a_topic_pie', {
         ...baseAnim,
-        title:{ text:'Kasallik Kategoriyalari', left: 12, top: 10, textStyle:{ color:'#cfe1ff', fontSize:14 } },
-        tooltip:{ trigger:'item', formatter: (p)=> `${p.name}: ${p.value} ta (${p.percent}%)` },
+        title:{ text:'Kasallik Kategoriyalari', left:12, top:10, textStyle:{ color:'#cfe1ff', fontSize:14 } },
+        tooltip:{ trigger:'item', formatter: p => `${p.name}: ${p.value} ta (${p.percent}%)` },
         legend:{
-          orient:'vertical',
-          right:8, top:'middle',
-          type:'scroll', height:260,
+          orient:'vertical', right:8, top:'middle', type:'scroll', height:260,
           itemWidth:14, itemHeight:10, itemGap:8,
           textStyle:{ color:'#cbd5e1', fontSize:11 },
           pageIconColor:'#94a3b8', pageTextStyle:{ color:'#94a3b8' }
@@ -252,31 +356,39 @@
           minShowLabelAngle:8,
           label:{ show:true, formatter:'{b}\n{c} ta ({d}%)', fontSize:11 },
           labelLine:{ length:8, length2:6 },
-          data: pairs.map(([name, value]) => ({ name, value }))
+          data: entries.map(([name, value]) => ({ name, value }))
         }]
-      };
-      mount('a_topic_pie', option);
-    }
+      });
+    })();
 
-    // Doctor bar
-    const doctorTop = U.countBy(aisum.filter(r=>r.doctor), r=>r.doctor).slice(0,10).reverse();
-    mount('a_doctor_bar', {
-      ...baseAnim, tooltip:{}, grid:{ ...baseGrid, left: 150 },
-      xAxis:{ type:'value', ...baseAxis },
-      yAxis:{ type:'category', data:doctorTop.map(x=>x[0]), ...baseAxis },
-      series:[barSeries('Messages', doctorTop.map(x=>x[1]))]
-    });
+    // Doctor bar (Top-10)
+    (()=>{
+      const top = U.countBy((aisum||[]).filter(r=>r?.doctor), r=>r.doctor)
+                  .slice(0,10).reverse();
+      mount('a_doctor_bar', {
+        ...baseAnim, tooltip:{},
+        grid:{ ...baseGrid, left:150 },
+        xAxis:{ type:'value', ...baseAxis },
+        yAxis:{ type:'category', data: top.map(x=>x[0]), ...baseAxis },
+        series:[ barSeries('Messages', top.map(x=>x[1])) ]
+      });
+    })();
 
     // Peak hours (UTC)
-    const hours = Array.from({length:24},(_,h)=>h);
-    const hourCount = Array(24).fill(0);
-    aisum.forEach(r => { const h = new Date(r.created_at).getUTCHours(); hourCount[h]++; });
-    mount('a_peak_hours', {
-      ...baseAnim, tooltip:{}, grid: baseGrid,
-      xAxis:{ type:'category', data:hours.map(h=>`${h}:00`), ...baseAxis },
-      yAxis:{ type:'value', ...baseAxis },
-      series:[barSeries('Msgs', hourCount)]
-    });
+    (()=>{
+      const hours = Array.from({length:24}, (_,h)=>h);
+      const cnt = Array(24).fill(0);
+      (aisum||[]).forEach(r => {
+        const h = new Date(r.created_at).getUTCHours();
+        if (Number.isFinite(h)) cnt[h] += 1;
+      });
+      mount('a_peak_hours', {
+        ...baseAnim, tooltip:{}, grid: baseGrid,
+        xAxis:{ type:'category', data: hours.map(h => `${h}:00`), ...baseAxis },
+        yAxis:{ type:'value', ...baseAxis },
+        series:[ barSeries('Msgs', cnt) ]
+      });
+    })();
 
     if (!silent) console.log('[dash] refreshed');
   }
@@ -288,7 +400,12 @@
   function startRealtime() {
     try {
       if (stopRealtime) stopRealtime();
-      stopRealtime = Api.subscribeRealtimeAll(() => debouncedReload());
+      // strong bo'lmasa, all ga fallback
+      const unsub =
+        (window.Api.subscribeRealtimeStrong ?
+          window.Api.subscribeRealtimeStrong(() => load()) :
+          window.Api.subscribeRealtimeAll(() => load()));
+      stopRealtime = () => { try { unsub && unsub(); } catch(_) {} };
     } catch (e) { console.warn('Realtime unavailable:', e); }
   }
   function startPolling() {
