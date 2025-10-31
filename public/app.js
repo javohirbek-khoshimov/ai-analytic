@@ -26,8 +26,7 @@ function mapToCategory(row) {
     "Hair":           "Soch va tuklar",
     "Face":           "Yuz (husnbuzar, ugri)",
     "Ophthalmology":  "Ko‘z",
-    "Unclear":        "Aniq emas",
-    "":               "Aniq emas"
+    
   };
 
   // 1) TG bo‘lsa – faqat TG mapping
@@ -339,7 +338,6 @@ function mapToCategory(row) {
     "Hair":           "Soch va tuklar",
     "Face":           "Yuz (husnbuzar, ugri)",
     "Ophthalmology":  "Ko‘z",
-    "Unclear":        "Aniq emas"
   };
 
   tgRows.forEach(r => {
