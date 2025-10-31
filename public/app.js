@@ -26,7 +26,6 @@ function mapToCategory(row) {
     "Hair":           "Soch va tuklar",
     "Face":           "Yuz (husnbuzar, ugri)",
     "Ophthalmology":  "Ko‘z",
-    
   };
 
   // 1) TG bo‘lsa – faqat TG mapping
