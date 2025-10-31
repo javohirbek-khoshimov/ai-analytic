@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SupaDash (Blue)</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- ECharts & Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+
+  <script defer src="config.js"></script>
+  <script defer src="utils.js"></script>
+  <script defer src="api.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📊 SupaDash</div>
+    <div class="controls">
+      <label>Range
+        <select id="rangeSelect">
+          <option value="30">Last 30d</option>
+          <option value="60">Last 60d</option>
+          <option value="90" selected>Last 90d</option>
+          <option value="180">Last 180d</option>
+        </select>
+      </label>
+      <button id="refreshBtn" class="primary">Refresh</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- KPI row (hamma tablarda ko‘rinadi) -->
+    <section class="grid kpis">
+      <div class="card kpi"><div class="kpi-title">Avg. Rating</div><div class="kpi-value" id="kpiAvgRating">—</div><div class="kpi-sub" id="kpiRatingVotes">0 votes</div></div>
+      <div class="card kpi"><div class="kpi-title">Total Users</div><div class="kpi-value" id="kpiUsers">—</div><div class="kpi-sub">users</div></div>
+      <div class="card kpi"><div class="kpi-title">Active Users</div><div class="kpi-value" id="kpiActiveUsers">—</div><div class="kpi-sub" id="kpiActiveRange">last 90d</div></div>
+      <div class="card kpi"><div class="kpi-title">Total AI Messages</div><div class="kpi-value" id="kpiAIMsgs">—</div><div class="kpi-sub">aisum_app + aisum_tgbot</div></div>
+    </section>
+
+    <!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" data-tab="users">Users</button>
+  <button class="tab" data-tab="rating">Rating</button>
+  <button class="tab" data-tab="aisum">AISum</button>
+  <button class="tab" data-tab="monitoring">Monitoring</button>
+</div>
+
+    <!-- Users -->
+    <section id="tab-users" class="tab-content active">
+      <h2 class="section-title">1) Users (Demographics & Usage)</h2>
+      <div class="grid three">
+        <div class="card"><div class="card-title">Active Users (time-series)</div><div id="u_active_ts" class="chart"></div></div>
+        <div class="card"><div class="card-title">Gender</div><div id="u_gender_pie" class="chart"></div></div>
+        <div class="card"><div class="card-title">Language</div><div id="u_lang_pie" class="chart"></div></div>
+        <div class="card"><div class="card-title">Place (Top regions)</div><div id="u_place_bar" class="chart"></div></div>
+        <div class="card"><div class="card-title">Age Groups</div><div id="u_age_bar" class="chart"></div></div>
+      </div>
+    </section>
+
+      <!-- Rating -->
+<section id="tab-rating" class="tab-content">
+  <h2 class="section-title">2) Rating (Customer Satisfaction & Engagement)</h2>
+
+  <!-- KPIs -->
+  <div class="grid kpis" style="margin-bottom:10px">
+    <div class="card kpi">
+      <div class="kpi-title">Total Chats (system)</div>
+      <div class="kpi-value" id="r_kpi_total_chats">—</div>
+      <div class="kpi-sub">sum of chat_count</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-title">Avg Chat Length / Session</div>
+      <div class="kpi-value" id="r_kpi_avg_len">—</div>
+      <div class="kpi-sub">messages per session</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-title">Users Rated</div>
+      <div class="kpi-value" id="r_kpi_users">—</div>
+      <div class="kpi-sub">rows in rating</div>
+    </div>
+    
+  </div>
+
+  <!-- Charts & table -->
+  <div class="grid three">
+    <div class="card">
+      <div class="card-title">Average Rating Trend (by day)</div>
+      <div id="r_avg_trend" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Ratings Distribution (histogram)</div>
+      <div id="r_hist" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Engaged Users (chat_count)</div>
+      <div id="r_top_chatters" class="chart"></div>
+    </div>
+
+
+
+    <div class="card" style="grid-column: span 2">
+      <div class="card-title">Total Chats per User</div>
+      <div style="max-height:340px; overflow:auto">
+        <table id="r_users_table" style="width:100%; border-collapse:collapse; color:#e2e8f0">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid rgba(255,255,255,.08)">
+              <th style="padding:8px">#</th>
+              <th style="padding:8px">User</th>
+              <th style="padding:8px">Chat Count</th>
+              <th style="padding:8px">Avg Rating</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- AISum -->
+    <section id="tab-aisum" class="tab-content">
+      <h2 class="section-title">3) AISum (AI Conversations & Topics)</h2>
+      <div class="grid two">
+        <div class="card"><div class="card-title">AI Messages per Day</div><div id="a_msgs_ts" class="chart"></div></div>
+        <div class="card"><div class="card-title">Topic Distribution (stacked)</div><div id="a_topic_stack" class="chart"></div></div>
+        <div class="card"><div class="card-title">Doctor Distribution</div><div id="a_doctor_bar" class="chart"></div></div>
+        <div class="card"><div class="card-title">Peak Hours (UTC)</div><div id="a_peak_hours" class="chart"></div></div>
+        <div class="card"><div class="card-title">Kasallik Kategoriyalari </div><div id="a_topic_pie" class="chart"></div>
+</div>
+      </div>
+    </section>
+
+    <!-- Monitoring -->
+<section id="tab-monitoring" class="tab-content">
+  <div class="section-head">
+    <h2 class="section-title">4) System Health & Monitoring (Live)</h2>
+    <label class="control-inline">
+      Resolution
+      <select id="monRes">
+        <option value="1m" selected>1m</option>
+        <option value="1h">1h</option>
+        <option value="1d">1d</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card"><h3>Latency (p50 / p95)</h3><div id="m_latency" class="chart h240"></div></div>
+    <div class="card"><h3>Error Rate (%)</h3><div id="m_error_rate" class="chart h240"></div></div>
+    <div class="card"><h3>Requests / min</h3><div id="m_rpm" class="chart h240"></div></div>
+    <div class="card"><h3>CPU / RAM (%)</h3><div id="m_cpu_ram" class="chart h240"></div></div>
+    <div class="card"><h3>AI Tokens & Cost</h3><div id="m_tokens_cost" class="chart h240"></div></div>
+  </div>
+
+  <div class="kpi" style="margin-top:8px">
+    <div class="kpi-title">Msg/min (DB)</div>
+    <div class="kpi-value" id="kpiRpm">—</div>
+  </div>
+</section>
+  </main>
+
+  <footer class="footer">Blue theme · ECharts · Supabase. Keep RLS ON (anon key).</footer>
+</body>
+</html>
